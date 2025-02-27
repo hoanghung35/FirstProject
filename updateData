@@ -1,0 +1,75 @@
+[HttpGet]
+public async Task<IActionResult> Edit(int id)
+{
+    var account = await _context.Accounts.FindAsync(id);
+    if (account == null)
+    {
+        return NotFound();
+    }
+    return View(account);
+}
+[HttpPost]
+public async Task<IActionResult> Edit(int Id, string Username, string? NewPassword, IFormFile? imageFile)
+{
+    var account = await _context.Accounts.FindAsync(Id);
+    if (account == null)
+    {
+        return NotFound();
+    }
+
+    // Cập nhật tên đăng nhập
+    account.Username = Username;
+
+    // Nếu có mật khẩu mới, cập nhật
+    if (!string.IsNullOrEmpty(NewPassword))
+    {
+        account.PasswordHash = HashPassword(NewPassword);
+    }
+
+    // Nếu có ảnh mới, cập nhật
+    if (imageFile != null && imageFile.Length > 0)
+    {
+        using (var memoryStream = new MemoryStream())
+        {
+            await imageFile.CopyToAsync(memoryStream);
+            account.ProfileImage = memoryStream.ToArray();
+        }
+    }
+
+    // Lưu thay đổi vào DB
+    _context.Accounts.Update(account);
+    await _context.SaveChangesAsync();
+
+    return RedirectToAction("Index"); // Chuyển về danh sách tài khoản
+}
+
+
+//View
+@model Account
+
+<h2>Cập Nhật Tài Khoản</h2>
+
+<form method="post" asp-action="Edit" asp-controller="Account" enctype="multipart/form-data">
+    <input type="hidden" name="Id" value="@Model.Id" />
+
+    <div class="form-group">
+        <label>Tên đăng nhập</label>
+        <input type="text" name="Username" class="form-control" value="@Model.Username" required />
+    </div>
+
+    <div class="form-group">
+        <label>Mật khẩu mới (nếu muốn đổi)</label>
+        <input type="password" name="NewPassword" class="form-control" />
+    </div>
+
+    <div class="form-group">
+        <label>Ảnh đại diện</label>
+        <input type="file" name="imageFile" class="form-control" />
+        @if (Model.ProfileImage != null)
+        {
+            <img src="data:image/png;base64,@Convert.ToBase64String(Model.ProfileImage)" width="100" height="100" />
+        }
+    </div>
+
+    <button type="submit" class="btn btn-primary">Lưu thay đổi</button>
+</form>
