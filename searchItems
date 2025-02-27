@@ -1,0 +1,54 @@
+using Microsoft.EntityFrameworkCore;
+using MVCDemot.Models;
+
+
+public class ProductService
+{
+    private readonly AppDbContext _context;
+
+    public ProductService(AppDbContext context)
+    {
+        _context = context;
+    }
+
+    public async Task<List<Product>> SearchProductsAsync(string keyword)
+    {
+        if (string.IsNullOrWhiteSpace(keyword))
+        {
+            return await _context.Products.ToListAsync();
+        }
+
+        return await _context.Products
+            .Where(p => EF.Functions.ILike(p.name, $"%{keyword}%") ||
+                        EF.Functions.ILike(p.address, $"%{keyword}%"))
+            .ToListAsync();
+    }
+}
+
+
+
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using System.Threading.Tasks;
+
+public class ProductController : Controller
+{
+    private readonly ProductService _productService;
+
+    public ProductController(ProductService productService)
+    {
+        _productService = productService;
+    }
+
+    public async Task<IActionResult> Index(string searchQuery = "")
+    {
+        var products = await _productService.SearchProductsAsync(searchQuery);
+        ViewBag.SearchQuery = searchQuery;
+        return View(products);
+    }
+}
+
+
+program.cs
+builder.Services.AddScoped<ProductService>();
+
