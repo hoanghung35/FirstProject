@@ -1,0 +1,68 @@
+dotnet add package EPPlus
+//View
+<form method="post" asp-action="ImportExcel" asp-controller="Item" enctype="multipart/form-data">
+    <div class="form-group">
+        <label>Chọn file Excel</label>
+        <input type="file" name="file" class="form-control" required />
+    </div>
+    <button type="submit" class="btn btn-primary">Tải lên và nhập dữ liệu</button>
+</form>
+
+
+//controller
+using OfficeOpenXml; // Thư viện EPPlus
+using System.Globalization;
+
+[HttpPost]
+public async Task<IActionResult> ImportExcel(IFormFile file)
+{
+    if (file == null || file.Length == 0)
+    {
+        ViewBag.Message = "Vui lòng chọn file Excel hợp lệ!";
+        return View("Index");
+    }
+
+    var itemList = new List<Item>();
+
+    using (var stream = new MemoryStream())
+    {
+        await file.CopyToAsync(stream);
+        using (var package = new ExcelPackage(stream))
+        {
+            ExcelWorksheet worksheet = package.Workbook.Worksheets[0]; // Lấy sheet đầu tiên
+            int rowCount = worksheet.Dimension.Rows; // Đếm số dòng
+
+            for (int row = 2; row <= rowCount; row++) // Bỏ qua dòng tiêu đề (row 1)
+            {
+                string name = worksheet.Cells[row, 1].Text; // Cột A
+                string priceText = worksheet.Cells[row, 2].Text; // Cột B
+                string quantityText = worksheet.Cells[row, 3].Text; // Cột C
+
+                if (decimal.TryParse(priceText, NumberStyles.Any, CultureInfo.InvariantCulture, out decimal price) &&
+                    int.TryParse(quantityText, out int quantity))
+                {
+                    itemList.Add(new Item
+                    {
+                        Name = name,
+                        Price = price,
+                        Quantity = quantity
+                    });
+                }
+            }
+        }
+    }
+
+    if (itemList.Any())
+    {
+        await _context.Items.AddRangeAsync(itemList);
+        await _context.SaveChangesAsync();
+        ViewBag.Message = "Nhập dữ liệu thành công!";
+    }
+    else
+    {
+        ViewBag.Message = "Không có dữ liệu hợp lệ!";
+    }
+
+    return View("Index");
+}
+
