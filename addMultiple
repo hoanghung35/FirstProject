@@ -66,3 +66,58 @@ public async Task<IActionResult> ImportExcel(IFormFile file)
     return View("Index");
 }
 
+
+
+
+//CSV
+[HttpPost]
+public async Task<IActionResult> ImportFile(IFormFile file)
+{
+    if (file == null || file.Length == 0)
+    {
+        ViewBag.Message = "Vui lòng chọn file CSV hợp lệ!";
+        return View("Index");
+    }
+
+    var itemList = new List<Item>();
+
+    using (var reader = new StreamReader(file.OpenReadStream(), Encoding.UTF8)) // Đọc file với UTF-8
+    {
+        bool isFirstLine = true;
+        while (!reader.EndOfStream)
+        {
+            var line = await reader.ReadLineAsync();
+            if (isFirstLine) 
+            {
+                isFirstLine = false; // Bỏ qua dòng tiêu đề nếu có
+                continue;
+            }
+
+            var values = line.Split(','); // Giả sử các cột cách nhau bằng dấu phẩy
+
+            if (values.Length >= 3) // Đảm bảo có đủ cột
+            {
+                itemList.Add(new Item
+                {
+                    Name = values[0],  // Chứa tiếng Việt
+                    Price = decimal.Parse(values[1]),
+                    Quantity = int.Parse(values[2])
+                });
+            }
+        }
+    }
+
+    if (itemList.Any())
+    {
+        await _context.Items.AddRangeAsync(itemList);
+        await _context.SaveChangesAsync();
+        ViewBag.Message = "Nhập dữ liệu thành công!";
+    }
+    else
+    {
+        ViewBag.Message = "Không có dữ liệu hợp lệ!";
+    }
+
+    return View("Index");
+}
+
