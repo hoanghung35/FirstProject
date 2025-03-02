@@ -1,0 +1,119 @@
+//Program cs
+using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
+
+var builder = WebApplication.CreateBuilder(args);
+
+// Kết nối đến database (sử dụng PostgreSQL, có thể thay bằng SQL Server, MySQL...)
+builder.Services.AddDbContext<ApplicationDbContext>(options =>
+    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+
+// Thêm Identity vào dự án
+builder.Services.AddIdentity<IdentityUser, IdentityRole>()
+    .AddEntityFrameworkStores<ApplicationDbContext>()
+    .AddDefaultTokenProviders();
+
+// Cấu hình Authentication bằng Cookie
+builder.Services.ConfigureApplicationCookie(options =>
+{
+    options.LoginPath = "/Account/Login";   // Trang login
+    options.LogoutPath = "/Account/Logout"; // Trang logout
+    options.AccessDeniedPath = "/Account/AccessDenied"; // Trang lỗi quyền hạn
+    options.ExpireTimeSpan = TimeSpan.FromMinutes(30); // Hết hạn sau 30 phút
+    options.SlidingExpiration = true; // Gia hạn thời gian nếu có tương tác
+});
+
+builder.Services.AddControllersWithViews();
+
+var app = builder.Build();
+
+app.UseAuthentication();
+app.UseAuthorization();
+app.MapControllers();
+app.Run();
+
+
+
+//View layout
+<ul class="navbar-nav">
+    @if (User.Identity.IsAuthenticated)
+    {
+        <li class="nav-item">
+            <span class="nav-link">👤 @User.Identity.Name</span>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" asp-controller="Account" asp-action="Logout">🚪 Logout</a>
+        </li>
+    }
+    else
+    {
+        <li class="nav-item">
+            <a class="nav-link" asp-controller="Account" asp-action="Login">🔑 Login</a>
+        </li>
+    }
+</ul>
+
+
+//controller
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Mvc;
+using System.Threading.Tasks;
+
+public class AccountController : Controller
+{
+    private readonly SignInManager<IdentityUser> _signInManager;
+    private readonly UserManager<IdentityUser> _userManager;
+
+    public AccountController(SignInManager<IdentityUser> signInManager, UserManager<IdentityUser> userManager)
+    {
+        _signInManager = signInManager;
+        _userManager = userManager;
+    }
+
+    // Hiển thị trang đăng nhập
+    [HttpGet]
+    public IActionResult Login()
+    {
+        return View();
+    }
+
+    // Xử lý đăng nhập
+    [HttpPost]
+    public async Task<IActionResult> Login(string email, string password)
+    {
+        var user = await _userManager.FindByEmailAsync(email);
+        if (user != null)
+        {
+            var result = await _signInManager.PasswordSignInAsync(user, password, true, lockoutOnFailure: false);
+            if (result.Succeeded)
+            {
+                return RedirectToAction("Index", "Home"); // Chuyển đến trang chính
+            }
+        }
+        ViewBag.ErrorMessage = "Email hoặc mật khẩu không đúng!";
+        return View();
+    }
+
+    // Xử lý đăng xuất
+    public async Task<IActionResult> Logout()
+    {
+        await _signInManager.SignOutAsync();
+        return RedirectToAction("Login", "Account");
+    }
+}
+
+//dbContext
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
+
+public class ApplicationDbContext : IdentityDbContext<IdentityUser>
+{
+    public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options)
+        : base(options)
+    {
+    }
+
+    public DbSet<Product> Products { get; set; }
+    public DbSet<Category> Categories { get; set; }
+}
