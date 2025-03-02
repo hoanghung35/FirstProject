@@ -1,54 +1,144 @@
-using Microsoft.EntityFrameworkCore;
-using MVCDemot.Models;
+//Model
+using System.ComponentModel.DataAnnotations;
 
-
-public class ProductService
+namespace YourNamespace.Models
 {
-    private readonly AppDbContext _context;
-
-    public ProductService(AppDbContext context)
+    public class Product
     {
-        _context = context;
+        [Key]
+        public int Id { get; set; }
+
+        [Required]
+        public string Name { get; set; }
+
+        public string Description { get; set; }
+
+        [Required]
+        public decimal Price { get; set; }
+
+        [Required]
+        public string Category { get; set; } // "Office", "Invent", "Tools"
     }
+}
 
-    public async Task<List<Product>> SearchProductsAsync(string keyword)
+
+//Service
+
+using Microsoft.EntityFrameworkCore;
+using YourNamespace.Data;
+using YourNamespace.Models;
+
+namespace YourNamespace.Services
+{
+    public class ProductService
     {
-        if (string.IsNullOrWhiteSpace(keyword))
+        private readonly ApplicationDbContext _context;
+
+        public ProductService(ApplicationDbContext context)
         {
-            return await _context.Products.ToListAsync();
+            _context = context;
         }
 
-        return await _context.Products
-            .Where(p => EF.Functions.ILike(p.name, $"%{keyword}%") ||
-                        EF.Functions.ILike(p.address, $"%{keyword}%"))
-            .ToListAsync();
+        public async Task<List<Product>> SearchProductsAsync(string keyword, string category)
+        {
+            var query = _context.Products.AsQueryable();
+
+            if (!string.IsNullOrWhiteSpace(category))
+            {
+                query = query.Where(p => p.Category == category);
+            }
+
+            if (!string.IsNullOrWhiteSpace(keyword))
+            {
+                query = query.Where(p =>
+                    EF.Functions.ILike(p.Name, $"%{keyword}%") ||
+                    EF.Functions.ILike(p.Description, $"%{keyword}%"));
+            }
+
+            return await query.ToListAsync();
+        }
     }
 }
 
 
-
+//controller
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using System.Threading.Tasks;
+using YourNamespace.Services;
+using YourNamespace.Models;
 
-public class ProductController : Controller
+namespace YourNamespace.Controllers
 {
-    private readonly ProductService _productService;
-
-    public ProductController(ProductService productService)
+    public class ItemController : Controller
     {
-        _productService = productService;
-    }
+        private readonly ProductService _productService;
 
-    public async Task<IActionResult> Index(string searchQuery = "")
-    {
-        var products = await _productService.SearchProductsAsync(searchQuery);
-        ViewBag.SearchQuery = searchQuery;
-        return View(products);
+        public ItemController(ProductService productService)
+        {
+            _productService = productService;
+        }
+
+        public async Task<IActionResult> Office(string searchQuery = "")
+        {
+            var products = await _productService.SearchProductsAsync(searchQuery, "Office");
+            ViewBag.SearchQuery = searchQuery;
+            return View(products);
+        }
+
+        public async Task<IActionResult> Invent(string searchQuery = "")
+        {
+            var products = await _productService.SearchProductsAsync(searchQuery, "Invent");
+            ViewBag.SearchQuery = searchQuery;
+            return View(products);
+        }
+
+        public async Task<IActionResult> Tools(string searchQuery = "")
+        {
+            var products = await _productService.SearchProductsAsync(searchQuery, "Tools");
+            ViewBag.SearchQuery = searchQuery;
+            return View(products);
+        }
     }
 }
 
+//search form
+<form method="get">
+    <input type="text" name="searchQuery" placeholder="Tìm kiếm..." value="@ViewBag.SearchQuery" />
+    <button type="submit">Tìm kiếm</button>
+</form>
 
-program.cs
-builder.Services.AddScoped<ProductService>();
+//Views
+@model List<YourNamespace.Models.Product>
+
+@{
+    ViewData["Title"] = "Văn phòng phẩm";
+}
+
+<h2>Danh sách Văn phòng phẩm</h2>
+
+@await Html.PartialAsync("_SearchForm")
+
+@if (Model.Any())
+{
+    <table border="1">
+        <tr>
+            <th>ID</th>
+            <th>Tên sản phẩm</th>
+            <th>Mô tả</th>
+            <th>Giá</th>
+        </tr>
+        @foreach (var item in Model)
+        {
+            <tr>
+                <td>@item.Id</td>
+                <td>@item.Name</td>
+                <td>@item.Description</td>
+                <td>@item.Price</td>
+            </tr>
+        }
+    </table>
+}
+else
+{
+    <p>Không tìm thấy sản phẩm nào.</p>
+}
 
