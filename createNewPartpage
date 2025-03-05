@@ -1,0 +1,97 @@
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+
+public class ProductController : Controller
+{
+    private readonly ApplicationDbContext _context;
+    private const int PageSize = 10; // Số bản ghi trên mỗi trang
+
+    public ProductController(ApplicationDbContext context)
+    {
+        _context = context;
+    }
+
+    public async Task<IActionResult> Index(int page = 1)
+    {
+        var totalRecords = await _context.Products.CountAsync();
+        var totalPages = (int)Math.Ceiling((double)totalRecords / PageSize);
+
+        var products = await _context.Products
+            .OrderBy(p => p.Id)
+            .Skip((page - 1) * PageSize)
+            .Take(PageSize)
+            .ToListAsync();
+
+        var viewModel = new ProductViewModel
+        {
+            Products = products,
+            CurrentPage = page,
+            TotalPages = totalPages
+        };
+
+        return View(viewModel);
+    }
+}
+
+
+  //Model view
+  using System.Collections.Generic;
+
+public class ProductViewModel
+{
+    public List<Product> Products { get; set; }
+    public int CurrentPage { get; set; }
+    public int TotalPages { get; set; }
+}
+
+
+    //View
+    @model ProductViewModel
+
+<h2>Product List</h2>
+
+<table class="table">
+    <thead>
+        <tr>
+            <th>ID</th>
+            <th>Name</th>
+            <th>Price</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var product in Model.Products)
+        {
+            <tr>
+                <td>@product.Id</td>
+                <td>@product.Name</td>
+                <td>@product.Price</td>
+            </tr>
+        }
+    </tbody>
+</table>
+
+<!-- Hiển thị nút phân trang -->
+<nav>
+    <ul class="pagination">
+        @if (Model.CurrentPage > 1)
+        {
+            <li class="page-item">
+                <a class="page-link" asp-action="Index" asp-route-page="@(Model.CurrentPage - 1)">Previous</a>
+            </li>
+        }
+
+        @for (int i = 1; i <= Model.TotalPages; i++)
+        {
+            <li class="page-item @(i == Model.CurrentPage ? "active" : "")">
+                <a class="page-link" asp-action="Index" asp-route-page="@i">@i</a>
+            </li>
+        }
+
+        @if (Model.CurrentPage < Model.TotalPages)
+        {
+            <li class="page-item">
+                <a class="page-link" asp-action="Index" asp-route-page="@(Model.CurrentPage + 1)">Next</a>
+            </li>
+        }
+    </ul>
+</nav>
