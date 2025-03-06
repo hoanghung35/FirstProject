@@ -11,7 +11,22 @@ public class ProductController : Controller
         _context = context;
     }
 
-    public async Task<IActionResult> Index(int page = 1)
+    public async Task<IActionResult> Office(int page = 1)
+    {
+        return await GetPagedProducts("Office", page);
+    }
+
+    public async Task<IActionResult> Tools(int page = 1)
+    {
+        return await GetPagedProducts("Tools", page);
+    }
+
+    public async Task<IActionResult> Invent(int page = 1)
+    {
+        return await GetPagedProducts("Invent", page);
+    }
+
+    private async Task<IActionResult> GetPagedProducts(string viewName, int page)
     {
         var totalRecords = await _context.Products.CountAsync();
         var totalPages = (int)Math.Ceiling((double)totalRecords / PageSize);
@@ -29,9 +44,10 @@ public class ProductController : Controller
             TotalPages = totalPages
         };
 
-        return View(viewModel);
+        return View(viewName, viewModel);
     }
 }
+
 
 
   //Model view
@@ -45,10 +61,8 @@ public class ProductViewModel
 }
 
 
-    //View
-    @model ProductViewModel
-
-<h2>Product List</h2>
+//Partial View
+@model ProductViewModel
 
 <table class="table">
     <thead>
@@ -76,21 +90,21 @@ public class ProductViewModel
         @if (Model.CurrentPage > 1)
         {
             <li class="page-item">
-                <a class="page-link" asp-action="Index" asp-route-page="@(Model.CurrentPage - 1)">Previous</a>
+                <a class="page-link" asp-action="@ViewData["ActionName"]" asp-route-page="@(Model.CurrentPage - 1)">Previous</a>
             </li>
         }
 
         @for (int i = 1; i <= Model.TotalPages; i++)
         {
             <li class="page-item @(i == Model.CurrentPage ? "active" : "")">
-                <a class="page-link" asp-action="Index" asp-route-page="@i">@i</a>
+                <a class="page-link" asp-action="@ViewData["ActionName"]" asp-route-page="@i">@i</a>
             </li>
         }
 
         @if (Model.CurrentPage < Model.TotalPages)
         {
             <li class="page-item">
-                <a class="page-link" asp-action="Index" asp-route-page="@(Model.CurrentPage + 1)">Next</a>
+                <a class="page-link" asp-action="@ViewData["ActionName"]" asp-route-page="@(Model.CurrentPage + 1)">Next</a>
             </li>
         }
     </ul>
