@@ -11,28 +11,47 @@ public class ProductController : Controller
         _context = context;
     }
 
-    public async Task<IActionResult> Office(int page = 1)
+    public async Task<IActionResult> Office(int page = 1, string searchQuery = "", string sortOrder = "name")
     {
-        return await GetPagedProducts("Office", page);
+        return await GetPagedProducts("Office", page, searchQuery, sortOrder);
     }
 
-    public async Task<IActionResult> Tools(int page = 1)
+    public async Task<IActionResult> Tools(int page = 1, string searchQuery = "", string sortOrder = "name")
     {
-        return await GetPagedProducts("Tools", page);
+        return await GetPagedProducts("Tools", page, searchQuery, sortOrder);
     }
 
-    public async Task<IActionResult> Invent(int page = 1)
+    public async Task<IActionResult> Invent(int page = 1, string searchQuery = "", string sortOrder = "name")
     {
-        return await GetPagedProducts("Invent", page);
+        return await GetPagedProducts("Invent", page, searchQuery, sortOrder);
     }
 
-    private async Task<IActionResult> GetPagedProducts(string viewName, int page)
+    private async Task<IActionResult> GetPagedProducts(string viewName, int page, string searchQuery, string sortOrder)
     {
-        var totalRecords = await _context.Products.CountAsync();
+        var query = _context.Products.AsQueryable();
+
+        // Tìm kiếm theo name, address, email
+        if (!string.IsNullOrEmpty(searchQuery))
+        {
+            query = query.Where(p =>
+                p.Name.Contains(searchQuery) ||
+                p.Address.Contains(searchQuery) ||
+                p.Email.Contains(searchQuery));
+        }
+
+        // Sắp xếp theo trường được chọn
+        query = sortOrder switch
+        {
+            "age" => query.OrderBy(p => p.Age),
+            "address" => query.OrderBy(p => p.Address),
+            "email" => query.OrderBy(p => p.Email),
+            _ => query.OrderBy(p => p.Name), // Mặc định sắp xếp theo Name
+        };
+
+        var totalRecords = await query.CountAsync();
         var totalPages = (int)Math.Ceiling((double)totalRecords / PageSize);
 
-        var products = await _context.Products
-            .OrderBy(p => p.Id)
+        var products = await query
             .Skip((page - 1) * PageSize)
             .Take(PageSize)
             .ToListAsync();
@@ -41,12 +60,15 @@ public class ProductController : Controller
         {
             Products = products,
             CurrentPage = page,
-            TotalPages = totalPages
+            TotalPages = totalPages,
+            SearchQuery = searchQuery,
+            SortOrder = sortOrder
         };
 
         return View(viewName, viewModel);
     }
 }
+
 
 
 
@@ -62,49 +84,75 @@ public class ProductViewModel
 
 
 //Partial View
+_ProductList
 @model ProductViewModel
+
+<form method="get" asp-action="@ViewData["ActionName"]">
+    <input type="text" name="searchQuery" value="@Model.SearchQuery" placeholder="Tìm kiếm..." />
+    <button type="submit">Tìm</button>
+</form>
 
 <table class="table">
     <thead>
         <tr>
-            <th>ID</th>
-            <th>Name</th>
-            <th>Price</th>
+            <th><a asp-action="@ViewData["ActionName"]" asp-route-sortOrder="name">Name</a></th>
+            <th><a asp-action="@ViewData["ActionName"]" asp-route-sortOrder="age">Age</a></th>
+            <th><a asp-action="@ViewData["ActionName"]" asp-route-sortOrder="address">Address</a></th>
+            <th><a asp-action="@ViewData["ActionName"]" asp-route-sortOrder="email">Email</a></th>
+            <th>Actions</th>
         </tr>
     </thead>
     <tbody>
         @foreach (var product in Model.Products)
         {
             <tr>
-                <td>@product.Id</td>
                 <td>@product.Name</td>
-                <td>@product.Price</td>
+                <td>@product.Age</td>
+                <td>@product.Address</td>
+                <td>@product.Email</td>
+                <td>
+                    <button class="btn btn-primary btn-edit"
+                            data-name="@product.Name"
+                            data-age="@product.Age"
+                            data-address="@product.Address"
+                            data-email="@product.Email"
+                            data-bs-toggle="modal"
+                            data-bs-target="#editProductModal">
+                        Chỉnh sửa
+                    </button>
+                </td>
             </tr>
         }
     </tbody>
 </table>
 
-<!-- Hiển thị nút phân trang -->
+
+_Pagination
+@model ProductViewModel
+
 <nav>
     <ul class="pagination">
         @if (Model.CurrentPage > 1)
         {
             <li class="page-item">
-                <a class="page-link" asp-action="@ViewData["ActionName"]" asp-route-page="@(Model.CurrentPage - 1)">Previous</a>
+                <a class="page-link" asp-action="@ViewData["ActionName"]" asp-route-page="@(Model.CurrentPage - 1)"
+                   asp-route-searchQuery="@Model.SearchQuery" asp-route-sortOrder="@Model.SortOrder">Previous</a>
             </li>
         }
 
         @for (int i = 1; i <= Model.TotalPages; i++)
         {
             <li class="page-item @(i == Model.CurrentPage ? "active" : "")">
-                <a class="page-link" asp-action="@ViewData["ActionName"]" asp-route-page="@i">@i</a>
+                <a class="page-link" asp-action="@ViewData["ActionName"]" asp-route-page="@i"
+                   asp-route-searchQuery="@Model.SearchQuery" asp-route-sortOrder="@Model.SortOrder">@i</a>
             </li>
         }
 
         @if (Model.CurrentPage < Model.TotalPages)
         {
             <li class="page-item">
-                <a class="page-link" asp-action="@ViewData["ActionName"]" asp-route-page="@(Model.CurrentPage + 1)">Next</a>
+                <a class="page-link" asp-action="@ViewData["ActionName"]" asp-route-page="@(Model.CurrentPage + 1)"
+                   asp-route-searchQuery="@Model.SearchQuery" asp-route-sortOrder="@Model.SortOrder">Next</a>
             </li>
         }
     </ul>
