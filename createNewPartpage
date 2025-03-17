@@ -1,159 +1,92 @@
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
+\\Helper
+using Microsoft.AspNetCore.Html;
+using Microsoft.AspNetCore.Mvc.Rendering;
+using System.Text;
 
-public class ProductController : Controller
+public static class PaginationHelper
 {
-    private readonly ApplicationDbContext _context;
-    private const int PageSize = 10; // Số bản ghi trên mỗi trang
-
-    public ProductController(ApplicationDbContext context)
+    public static IHtmlContent RenderPagination(this IHtmlHelper htmlHelper, int currentPage, int totalPages, string urlTemplate)
     {
-        _context = context;
-    }
+        if (totalPages <= 1) return HtmlString.Empty;
 
-    public async Task<IActionResult> Office(int page = 1, string searchQuery = "", string sortOrder = "name")
-    {
-        return await GetPagedProducts("Office", page, searchQuery, sortOrder);
-    }
+        var sb = new StringBuilder();
+        sb.AppendLine("<nav aria-label='Page navigation'>");
+        sb.AppendLine("<ul class='pagination justify-content-center'>");
 
-    public async Task<IActionResult> Tools(int page = 1, string searchQuery = "", string sortOrder = "name")
-    {
-        return await GetPagedProducts("Tools", page, searchQuery, sortOrder);
-    }
+        // Previous button
+        sb.AppendLine($"<li class='page-item {(currentPage == 1 ? "disabled" : "")}'>");
+        sb.AppendLine($"<a class='page-link' href='{urlTemplate.Replace("{page}", (currentPage - 1).ToString())}'>Previous</a>");
+        sb.AppendLine("</li>");
 
-    public async Task<IActionResult> Invent(int page = 1, string searchQuery = "", string sortOrder = "name")
-    {
-        return await GetPagedProducts("Invent", page, searchQuery, sortOrder);
-    }
-
-    private async Task<IActionResult> GetPagedProducts(string viewName, int page, string searchQuery, string sortOrder)
-    {
-        var query = _context.Products.AsQueryable();
-
-        // Tìm kiếm theo name, address, email
-        if (!string.IsNullOrEmpty(searchQuery))
+        // Page numbers
+        for (int i = 1; i <= totalPages; i++)
         {
-            query = query.Where(p =>
-                p.Name.Contains(searchQuery) ||
-                p.Address.Contains(searchQuery) ||
-                p.Email.Contains(searchQuery));
+            sb.AppendLine($"<li class='page-item {(currentPage == i ? "active" : "")}'>");
+            sb.AppendLine($"<a class='page-link' href='{urlTemplate.Replace("{page}", i.ToString())}'>{i}</a>");
+            sb.AppendLine("</li>");
         }
 
-        // Sắp xếp theo trường được chọn
-        query = sortOrder switch
-        {
-            "age" => query.OrderBy(p => p.Age),
-            "address" => query.OrderBy(p => p.Address),
-            "email" => query.OrderBy(p => p.Email),
-            _ => query.OrderBy(p => p.Name), // Mặc định sắp xếp theo Name
-        };
+        // Next button
+        sb.AppendLine($"<li class='page-item {(currentPage == totalPages ? "disabled" : "")}'>");
+        sb.AppendLine($"<a class='page-link' href='{urlTemplate.Replace("{page}", (currentPage + 1).ToString())}'>Next</a>");
+        sb.AppendLine("</li>");
 
-        var totalRecords = await query.CountAsync();
-        var totalPages = (int)Math.Ceiling((double)totalRecords / PageSize);
+        sb.AppendLine("</ul>");
+        sb.AppendLine("</nav>");
 
-        var products = await query
-            .Skip((page - 1) * PageSize)
-            .Take(PageSize)
-            .ToListAsync();
-
-        var viewModel = new ProductViewModel
-        {
-            Products = products,
-            CurrentPage = page,
-            TotalPages = totalPages,
-            SearchQuery = searchQuery,
-            SortOrder = sortOrder
-        };
-
-        return View(viewName, viewModel);
+        return new HtmlString(sb.ToString());
     }
 }
 
+\\call helper in view
+@using YourProjectNamespace.Helpers
+...
+@Html.RenderPagination(currentPage, totalPages, "/Product/Index?page={page}")
 
-
-
-  //Model view
-  using System.Collections.Generic;
-
-public class ProductViewModel
+//Controller
+public IActionResult Index(int page = 1)
 {
-    public List<Product> Products { get; set; }
-    public int CurrentPage { get; set; }
-    public int TotalPages { get; set; }
+    int pageSize = 10;
+    var products = _context.Products.Skip((page - 1) * pageSize).Take(pageSize).ToList();
+    int totalItems = _context.Products.Count();
+    int totalPages = (int)Math.Ceiling((double)totalItems / pageSize);
+
+    ViewBag.CurrentPage = page;
+    ViewBag.TotalPages = totalPages;
+
+    return View(products);
 }
 
-
-//Partial View
-_ProductList
-@model ProductViewModel
-
-<form method="get" asp-action="@ViewData["ActionName"]">
-    <input type="text" name="searchQuery" value="@Model.SearchQuery" placeholder="Tìm kiếm..." />
-    <button type="submit">Tìm</button>
-</form>
-
-<table class="table">
-    <thead>
-        <tr>
-            <th><a asp-action="@ViewData["ActionName"]" asp-route-sortOrder="name">Name</a></th>
-            <th><a asp-action="@ViewData["ActionName"]" asp-route-sortOrder="age">Age</a></th>
-            <th><a asp-action="@ViewData["ActionName"]" asp-route-sortOrder="address">Address</a></th>
-            <th><a asp-action="@ViewData["ActionName"]" asp-route-sortOrder="email">Email</a></th>
-            <th>Actions</th>
-        </tr>
-    </thead>
-    <tbody>
-        @foreach (var product in Model.Products)
-        {
+//view
+@model List<Product>
+@{
+    var currentPage = ViewBag.CurrentPage ?? 1;
+    var totalPages = ViewBag.TotalPages ?? 1;
+}
+<div class="table-responsive" style="max-height:500px; overflow-y:auto;">
+    <table class="table table-striped table-bordered text-center">
+        <thead class="sticky-top table-dark">
             <tr>
-                <td>@product.Name</td>
-                <td>@product.Age</td>
-                <td>@product.Address</td>
-                <td>@product.Email</td>
-                <td>
-                    <button class="btn btn-primary btn-edit"
-                            data-name="@product.Name"
-                            data-age="@product.Age"
-                            data-address="@product.Address"
-                            data-email="@product.Email"
-                            data-bs-toggle="modal"
-                            data-bs-target="#editProductModal">
-                        Chỉnh sửa
-                    </button>
-                </td>
+                <th>#</th>
+                <th>Name</th>
+                <th>Price</th>
+                <th>Action</th>
             </tr>
-        }
-    </tbody>
-</table>
+        </thead>
+        <tbody>
+            @foreach (var item in Model)
+            {
+                <tr>
+                    <td>@item.Id</td>
+                    <td>@item.Name</td>
+                    <td>@item.Price</td>
+                    <td>
+                        <button class="btn btn-sm btn-info" onclick="showDetails(@item.Id)">Xem chi tiết</button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
 
-
-_Pagination
-@model ProductViewModel
-
-<nav>
-    <ul class="pagination">
-        @if (Model.CurrentPage > 1)
-        {
-            <li class="page-item">
-                <a class="page-link" asp-action="@ViewData["ActionName"]" asp-route-page="@(Model.CurrentPage - 1)"
-                   asp-route-searchQuery="@Model.SearchQuery" asp-route-sortOrder="@Model.SortOrder">Previous</a>
-            </li>
-        }
-
-        @for (int i = 1; i <= Model.TotalPages; i++)
-        {
-            <li class="page-item @(i == Model.CurrentPage ? "active" : "")">
-                <a class="page-link" asp-action="@ViewData["ActionName"]" asp-route-page="@i"
-                   asp-route-searchQuery="@Model.SearchQuery" asp-route-sortOrder="@Model.SortOrder">@i</a>
-            </li>
-        }
-
-        @if (Model.CurrentPage < Model.TotalPages)
-        {
-            <li class="page-item">
-                <a class="page-link" asp-action="@ViewData["ActionName"]" asp-route-page="@(Model.CurrentPage + 1)"
-                   asp-route-searchQuery="@Model.SearchQuery" asp-route-sortOrder="@Model.SortOrder">Next</a>
-            </li>
-        }
-    </ul>
-</nav>
+@Html.RenderPagination(currentPage, totalPages, "/Product/Index?page={page}")
