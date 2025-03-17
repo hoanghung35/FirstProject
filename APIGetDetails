@@ -1,0 +1,59 @@
+//Controller
+public class ItemController : Controller
+{
+  private readonly LogDbContext context_;
+  public ItemController(LogDbContext context) {
+    context_ = context;
+  }
+}
+
+//Controller/API
+using Microsoft.AspNetCore.Mvc;
+
+[Route("api/[controller]")]
+[ApiController]
+public class ProductApiController : ControllerBase
+{
+    private readonly ApplicationDbContext _context;
+
+    public ProductApiController(ApplicationDbContext context)
+    {
+        _context = context;
+    }
+
+    [HttpGet("GetProductDetails/{id}")]
+    public IActionResult GetProductDetails(int id)
+    {
+        var product = _context.Products.FirstOrDefault(p => p.Id == id);
+        if (product == null)
+        {
+            return NotFound(new { success = false, message = "Không tìm thấy sản phẩm" });
+        }
+        return Ok(new { success = true, data = product });
+    }
+}
+
+//View
+
+<script>
+function showDetails(productId) {
+    $.ajax({
+        url: '/api/ProductApi/GetProductDetails/' + productId,
+        type: 'GET',
+        success: function(response) {
+            if (response.success) {
+                $("#detailName").text(response.data.name);
+                $("#detailDescription").text(response.data.description);
+                $("#detailPrice").text(response.data.price);
+                $("#detailQuantity").text(response.data.quantity);
+                $("#detailsModal").modal('show');
+            } else {
+                alert(response.message);
+            }
+        },
+        error: function() {
+            alert("Đã xảy ra lỗi khi lấy thông tin sản phẩm.");
+        }
+    });
+}
+</script>
