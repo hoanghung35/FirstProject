@@ -35,6 +35,49 @@ public class ProductApiController : ControllerBase
 
 //View
 
+@model List<Product>
+
+<table class="table">
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Price</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var item in Model)
+        {
+            <tr>
+                <td>@item.Name</td>
+                <td>@item.Price</td>
+                <td>
+                    <button class="btn btn-primary" onclick="showDetails(@item.Id)">Xem chi tiết</button>
+                </td>
+            </tr>
+        }
+    </tbody>
+</table>
+
+<!-- Modal để hiển thị chi tiết sản phẩm -->
+<div class="modal fade" id="detailsModal" tabindex="-1" role="dialog">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Chi tiết sản phẩm</h5>
+                <button type="button" class="close" data-dismiss="modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p><strong>Name:</strong> <span id="detailName"></span></p>
+                <p><strong>Description:</strong> <span id="detailDescription"></span></p>
+                <p><strong>Price:</strong> <span id="detailPrice"></span></p>
+                <p><strong>Quantity:</strong> <span id="detailQuantity"></span></p>
+            </div>
+        </div>
+    </div>
+</div>
+
+
 <script>
 function showDetails(productId) {
     $.ajax({
