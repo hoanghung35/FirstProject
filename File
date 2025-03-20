@@ -1,0 +1,94 @@
+//Controller API
+using Microsoft.AspNetCore.Mvc;
+using OfficeOpenXml;
+
+[ApiController]
+[Route("api/[controller]")]
+public class ExcelImportController : ControllerBase
+{
+    private readonly AppDbContext _context;
+
+    public ExcelImportController(AppDbContext context)
+    {
+        _context = context;
+    }
+
+    [HttpPost("upload")]
+    public async Task<IActionResult> UploadExcel([FromForm] IFormFile file)
+    {
+        if (file == null || file.Length == 0)
+            return BadRequest("File không hợp lệ.");
+
+        if (!file.FileName.EndsWith(".xlsx"))
+            return BadRequest("Chỉ hỗ trợ file .xlsx");
+
+        try
+        {
+            ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
+
+            using (var stream = new MemoryStream())
+            {
+                await file.CopyToAsync(stream);
+                using (var package = new ExcelPackage(stream))
+                {
+                    var worksheet = package.Workbook.Worksheets[0];
+                    var rowCount = worksheet.Dimension.Rows;
+
+                    var products = new List<Product>();
+                    for (int row = 2; row <= rowCount; row++)
+                    {
+                        products.Add(new Product
+                        {
+                            Name = worksheet.Cells[row, 1].Text,
+                            Quantity = int.Parse(worksheet.Cells[row, 2].Text),
+                            Price = decimal.Parse(worksheet.Cells[row, 3].Text)
+                        });
+                    }
+
+                    await _context.Products.AddRangeAsync(products);
+                    await _context.SaveChangesAsync();
+                }
+            }
+
+            return Ok(new { message = "Nhập dữ liệu thành công." });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { error = ex.Message });
+        }
+    }
+}
+
+//Call API
+<input type="file" id="excelFile" />
+<button onclick="uploadExcel()">Upload Excel</button>
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script>
+    function uploadExcel() {
+        var fileInput = document.getElementById("excelFile");
+        var file = fileInput.files[0];
+        if (!file) {
+            alert("Vui lòng chọn file");
+            return;
+        }
+
+        var formData = new FormData();
+        formData.append("file", file);
+
+        $.ajax({
+            url: '/api/ExcelImport/upload',
+            type: 'POST',
+            data: formData,
+            contentType: false,
+            processData: false,
+            success: function (res) {
+                alert(res.message);
+            },
+            error: function (err) {
+                alert("Lỗi: " + (err.responseJSON?.error || err.responseText));
+            }
+        });
+    }
+</script>
+
