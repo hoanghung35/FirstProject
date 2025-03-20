@@ -1,6 +1,7 @@
 //Controller API
 using Microsoft.AspNetCore.Mvc;
 using OfficeOpenXml;
+using Microsoft.EntityFrameworkCore;
 
 [ApiController]
 [Route("api/[controller]")]
@@ -57,38 +58,99 @@ public class ExcelImportController : ControllerBase
             return StatusCode(500, new { error = ex.Message });
         }
     }
+
+    [HttpGet("export")]
+    public async Task<IActionResult> ExportExcel()
+    {
+        var products = await _context.Products.ToListAsync();
+
+        ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
+        using (var package = new ExcelPackage())
+        {
+            var worksheet = package.Workbook.Worksheets.Add("Products");
+
+            // Header style
+            worksheet.Cells[1, 1].Value = "Name";
+            worksheet.Cells[1, 2].Value = "Quantity";
+            worksheet.Cells[1, 3].Value = "Price";
+
+            using (var range = worksheet.Cells[1, 1, 1, 3])
+            {
+                range.Style.Font.Bold = true;
+                range.Style.Fill.PatternType = OfficeOpenXml.Style.ExcelFillStyle.Solid;
+                range.Style.Fill.BackgroundColor.SetColor(System.Drawing.Color.LightBlue);
+                range.Style.Border.BorderAround(OfficeOpenXml.Style.ExcelBorderStyle.Thin);
+            }
+
+            // Fill data
+            for (int i = 0; i < products.Count; i++)
+            {
+                worksheet.Cells[i + 2, 1].Value = products[i].Name;
+                worksheet.Cells[i + 2, 2].Value = products[i].Quantity;
+                worksheet.Cells[i + 2, 3].Value = products[i].Price;
+                worksheet.Cells[i + 2, 3].Style.Numberformat.Format = "#,##0.00";
+            }
+
+            worksheet.Cells[worksheet.Dimension.Address].AutoFitColumns();
+
+            var stream = new MemoryStream();
+            package.SaveAs(stream);
+            stream.Position = 0;
+
+            string excelName = $"Products_{DateTime.Now:yyyyMMddHHmmss}.xlsx";
+
+            return File(stream, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", excelName);
+        }
+    }
 }
 
-//Call API
-<input type="file" id="excelFile" />
-<button onclick="uploadExcel()">Upload Excel</button>
 
-<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-<script>
-    function uploadExcel() {
-        var fileInput = document.getElementById("excelFile");
-        var file = fileInput.files[0];
-        if (!file) {
-            alert("Vui lòng chọn file");
-            return;
+//Call API
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Import / Export Excel Demo</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+</head>
+<body>
+    <h2>Nhập dữ liệu từ file Excel vào bảng</h2>
+    <input type="file" id="excelFile" />
+    <button onclick="uploadExcel()">Upload Excel</button>
+    <br /><br />
+    <h2>Xuất dữ liệu ra file Excel từ bảng</h2>
+    <button onclick="exportExcel()">Export Excel</button>
+
+    <script>
+        function uploadExcel() {
+            var fileInput = document.getElementById("excelFile");
+            var file = fileInput.files[0];
+            if (!file) {
+                alert("Vui lòng chọn file Excel trước khi upload.");
+                return;
+            }
+
+            var formData = new FormData();
+            formData.append("file", file);
+
+            $.ajax({
+                url: '/api/ExcelImport/upload',
+                type: 'POST',
+                data: formData,
+                contentType: false,
+                processData: false,
+                success: function (res) {
+                    alert(res.message);
+                },
+                error: function (err) {
+                    alert("Lỗi: " + (err.responseJSON?.error || err.responseText));
+                }
+            });
         }
 
-        var formData = new FormData();
-        formData.append("file", file);
-
-        $.ajax({
-            url: '/api/ExcelImport/upload',
-            type: 'POST',
-            data: formData,
-            contentType: false,
-            processData: false,
-            success: function (res) {
-                alert(res.message);
-            },
-            error: function (err) {
-                alert("Lỗi: " + (err.responseJSON?.error || err.responseText));
-            }
-        });
-    }
-</script>
-
+        function exportExcel() {
+            window.location.href = '/api/ExcelImport/export';
+        }
+    </script>
+</body>
+</html>
