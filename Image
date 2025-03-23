@@ -1,0 +1,84 @@
+//Controller
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+
+public class ImageController : Controller
+{
+    private readonly AppDbContext _context;
+    public ImageController(AppDbContext context)
+    {
+        _context = context;
+    }
+
+    [HttpGet]
+    public IActionResult Create()
+    {
+        return View();
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> Create(Image image, IFormFile? imageFile)
+    {
+        if (ModelState.IsValid)
+        {
+
+            if (imageFile != null && imageFile.Length > 0)
+            {
+                using var ms = new MemoryStream();
+                await imageFile.CopyToAsync(ms);
+                image.source = ms.ToArray();
+                image.ImageType = imageFile.ContentType;
+            }
+
+            _context.Images.Add(image);
+            await _context.SaveChangesAsync();
+            return RedirectToAction("List");
+        }
+        return View(image);
+    }
+
+    public IActionResult List()
+    {
+        var products = _context.Images.ToList();
+        return View(products);
+    }
+
+    public IActionResult DisplayImage(int id)
+    {
+        var product = _context.Images.FirstOrDefault(p => p.id == id);
+        if (product == null || product.source == null) return NotFound();
+        return File(product.source, product.ImageType ?? "image/jpeg");
+    }
+}
+
+//View/Iamge
+**Create
+@model Image
+
+<h2>Create Product</h2>
+<form asp-action="Create" method="post" enctype="multipart/form-data">
+    <div>
+        <label>Image (JPEG or PNG):</label>
+        <input type="file" name="imageFile" />
+    </div>
+    <button type="submit">Save</button>
+</form>
+
+
+**show
+@model IEnumerable<Image>
+
+<h2>Product List</h2>
+@foreach (var product in Model)
+{
+    <div style="border:1px solid #ccc; padding:10px; margin-bottom:10px;">
+        @if (product.source != null)
+        {
+            <img src="@Url.Action("DisplayImage", "Image", new { id = product.id })" width="200" />
+        }
+        else
+        {
+            <p><i>No image uploaded</i></p>
+        }
+    </div>
+}
