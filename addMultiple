@@ -1,123 +1,139 @@
-dotnet add package EPPlus
-//View
-<form method="post" asp-action="ImportExcel" asp-controller="Item" enctype="multipart/form-data">
-    <div class="form-group">
-        <label>Chọn file Excel</label>
-        <input type="file" name="file" class="form-control" required />
-    </div>
-    <button type="submit" class="btn btn-primary">Tải lên và nhập dữ liệu</button>
-</form>
+// ✅ Ví dụ hoàn chỉnh: Upload & Export Excel qua API trong .NET 8 MVC dùng EPPlus v8
 
-
-//controller
-using OfficeOpenXml; // Thư viện EPPlus
-using System.Globalization;
-
-[HttpPost]
-public async Task<IActionResult> ImportExcel(IFormFile file)
+// ==================== 1. Model ====================
+public class Employee
 {
-    if (file == null || file.Length == 0)
+    public int Id { get; set; }
+    public string Name { get; set; }
+    public int Age { get; set; }
+}
+
+// ==================== 2. DbContext ====================
+public class AppDbContext : DbContext
+{
+    public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
+
+    public DbSet<Employee> Employees { get; set; }
+}
+
+// ==================== 3. API Controller ====================
+using Microsoft.AspNetCore.Mvc;
+using OfficeOpenXml;
+
+[Route("api/[controller]")]
+[ApiController]
+public class ExcelApiController : ControllerBase
+{
+    private readonly AppDbContext _context;
+
+    public ExcelApiController(AppDbContext context)
     {
-        ViewBag.Message = "Vui lòng chọn file Excel hợp lệ!";
-        return View("Index");
+        _context = context;
+        ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
     }
 
-    var itemList = new List<Item>();
-
-    using (var stream = new MemoryStream())
+    [HttpPost("upload")]
+    public async Task<IActionResult> UploadExcel([FromForm] IFormFile file)
     {
-        await file.CopyToAsync(stream);
-        using (var package = new ExcelPackage(stream))
+        if (file == null || file.Length == 0)
+            return BadRequest("Chưa chọn file!");
+
+        using (var stream = new MemoryStream())
         {
-            ExcelWorksheet worksheet = package.Workbook.Worksheets[0]; // Lấy sheet đầu tiên
-            int rowCount = worksheet.Dimension.Rows; // Đếm số dòng
-
-            for (int row = 2; row <= rowCount; row++) // Bỏ qua dòng tiêu đề (row 1)
+            await file.CopyToAsync(stream);
+            using (var package = new ExcelPackage(stream))
             {
-                string name = worksheet.Cells[row, 1].Text; // Cột A
-                string priceText = worksheet.Cells[row, 2].Text; // Cột B
-                string quantityText = worksheet.Cells[row, 3].Text; // Cột C
-
-                if (decimal.TryParse(priceText, NumberStyles.Any, CultureInfo.InvariantCulture, out decimal price) &&
-                    int.TryParse(quantityText, out int quantity))
+                var ws = package.Workbook.Worksheets.First();
+                for (int row = 2; row <= ws.Dimension.End.Row; row++)
                 {
-                    itemList.Add(new Item
+                    var emp = new Employee
                     {
-                        Name = name,
-                        Price = price,
-                        Quantity = quantity
-                    });
+                        Name = ws.Cells[row, 1].Text,
+                        Age = int.Parse(ws.Cells[row, 2].Text)
+                    };
+                    _context.Employees.Add(emp);
                 }
+                await _context.SaveChangesAsync();
             }
         }
+
+        return Ok("Import thành công!");
     }
 
-    if (itemList.Any())
+    [HttpGet("export")]
+    public async Task<IActionResult> ExportExcel()
     {
-        await _context.Items.AddRangeAsync(itemList);
-        await _context.SaveChangesAsync();
-        ViewBag.Message = "Nhập dữ liệu thành công!";
-    }
-    else
-    {
-        ViewBag.Message = "Không có dữ liệu hợp lệ!";
-    }
+        var employees = await _context.Employees.ToListAsync();
 
-    return View("Index");
-}
-
-
-
-
-//CSV
-[HttpPost]
-public async Task<IActionResult> ImportFile(IFormFile file)
-{
-    if (file == null || file.Length == 0)
-    {
-        ViewBag.Message = "Vui lòng chọn file CSV hợp lệ!";
-        return View("Index");
-    }
-
-    var itemList = new List<Item>();
-
-    using (var reader = new StreamReader(file.OpenReadStream(), Encoding.UTF8)) // Đọc file với UTF-8
-    {
-        bool isFirstLine = true;
-        while (!reader.EndOfStream)
+        using (var package = new ExcelPackage())
         {
-            var line = await reader.ReadLineAsync();
-            if (isFirstLine) 
+            var ws = package.Workbook.Worksheets.Add("Employees");
+            ws.Cells["A1"].Value = "Name";
+            ws.Cells["B1"].Value = "Age";
+
+            for (int i = 0; i < employees.Count; i++)
             {
-                isFirstLine = false; // Bỏ qua dòng tiêu đề nếu có
-                continue;
+                ws.Cells[i + 2, 1].Value = employees[i].Name;
+                ws.Cells[i + 2, 2].Value = employees[i].Age;
             }
 
-            var values = line.Split(','); // Giả sử các cột cách nhau bằng dấu phẩy
+            ws.Cells[ws.Dimension.Address].AutoFitColumns();
 
-            if (values.Length >= 3) // Đảm bảo có đủ cột
-            {
-                itemList.Add(new Item
-                {
-                    Name = values[0],  // Chứa tiếng Việt
-                    Price = decimal.Parse(values[1]),
-                    Quantity = int.Parse(values[2])
-                });
-            }
+            var stream = new MemoryStream();
+            package.SaveAs(stream);
+            stream.Position = 0;
+
+            return File(stream, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "Employees.xlsx");
         }
     }
-
-    if (itemList.Any())
-    {
-        await _context.Items.AddRangeAsync(itemList);
-        await _context.SaveChangesAsync();
-        ViewBag.Message = "Nhập dữ liệu thành công!";
-    }
-    else
-    {
-        ViewBag.Message = "Không có dữ liệu hợp lệ!";
-    }
-
-    return View("Index");
 }
 
+// ==================== 4. Gọi API từ View (sử dụng jQuery) ====================
+@{
+    ViewData["Title"] = "Excel API Import/Export";
+}
+<h2>Upload Excel (API)</h2>
+<input type="file" id="excelFile" />
+<button onclick="uploadExcel()">Upload Excel</button>
+
+<p id="result"></p>
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script>
+    function uploadExcel() {
+        var file = $('#excelFile')[0].files[0];
+        var formData = new FormData();
+        formData.append("file", file);
+
+        $.ajax({
+            url: '/api/ExcelApi/upload',
+            type: 'POST',
+            data: formData,
+            processData: false,
+            contentType: false,
+            success: function (response) {
+                $('#result').text(response);
+            },
+            error: function (err) {
+                $('#result').text("Có lỗi xảy ra.");
+            }
+        });
+    }
+</script>
+
+<h3>Export Excel (API)</h3>
+<a href="/api/ExcelApi/export"><button>Tải Excel</button></a>
+
+// ==================== 5. Program.cs setup ====================
+var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddControllers();
+builder.Services.AddDbContext<AppDbContext>(options =>
+    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+
+var app = builder.Build();
+app.UseStaticFiles();
+app.UseRouting();
+app.MapControllers();
+app.MapFallbackToFile("index.html");
+app.Run();
