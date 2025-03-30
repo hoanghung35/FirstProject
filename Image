@@ -1,11 +1,8 @@
 //Controller
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-
-public class ImageController : Controller
+public class ProductController : Controller
 {
     private readonly AppDbContext _context;
-    public ImageController(AppDbContext context)
+    public ProductController(AppDbContext context)
     {
         _context = context;
     }
@@ -17,46 +14,59 @@ public class ImageController : Controller
     }
 
     [HttpPost]
-    public async Task<IActionResult> Create(Image image, IFormFile? imageFile)
+    public async Task<IActionResult> Create(Product product, IFormFile? imageFile)
     {
         if (ModelState.IsValid)
         {
+            product.CreatedDate = DateTime.Now;
 
             if (imageFile != null && imageFile.Length > 0)
             {
                 using var ms = new MemoryStream();
                 await imageFile.CopyToAsync(ms);
-                image.source = ms.ToArray();
-                image.ImageType = imageFile.ContentType;
+                product.ImageData = ms.ToArray();
+                product.ImageContentType = imageFile.ContentType;
             }
 
-            _context.Images.Add(image);
+            _context.Products.Add(product);
             await _context.SaveChangesAsync();
             return RedirectToAction("List");
         }
-        return View(image);
+        return View(product);
     }
 
     public IActionResult List()
     {
-        var products = _context.Images.ToList();
+        var products = _context.Products.ToList();
         return View(products);
     }
 
     public IActionResult DisplayImage(int id)
     {
-        var product = _context.Images.FirstOrDefault(p => p.id == id);
-        if (product == null || product.source == null) return NotFound();
-        return File(product.source, product.ImageType ?? "image/jpeg");
+        var product = _context.Products.FirstOrDefault(p => p.Id == id);
+        if (product == null || product.ImageData == null) return NotFound();
+        return File(product.ImageData, product.ImageContentType ?? "image/jpeg");
     }
 }
 
-//View/Iamge
-**Create
-@model Image
+
+//View
+@model Product
 
 <h2>Create Product</h2>
 <form asp-action="Create" method="post" enctype="multipart/form-data">
+    <div>
+        <label>Name:</label>
+        <input asp-for="Name" />
+    </div>
+    <div>
+        <label>Description:</label>
+        <textarea asp-for="Description"></textarea>
+    </div>
+    <div>
+        <label>Price:</label>
+        <input asp-for="Price" type="number" step="0.01" />
+    </div>
     <div>
         <label>Image (JPEG or PNG):</label>
         <input type="file" name="imageFile" />
@@ -64,17 +74,20 @@ public class ImageController : Controller
     <button type="submit">Save</button>
 </form>
 
-
-**show
-@model IEnumerable<Image>
+//View/List
+@model IEnumerable<Product>
 
 <h2>Product List</h2>
 @foreach (var product in Model)
 {
     <div style="border:1px solid #ccc; padding:10px; margin-bottom:10px;">
-        @if (product.source != null)
+        <h4>@product.Name</h4>
+        <p>@product.Description</p>
+        <p>Price: $@product.Price</p>
+        <p>Created on: @product.CreatedDate.ToString("dd/MM/yyyy")</p>
+        @if (product.ImageData != null)
         {
-            <img src="@Url.Action("DisplayImage", "Image", new { id = product.id })" width="200" />
+            <img src="@Url.Action("DisplayImage", "Product", new { id = product.Id })" width="200" />
         }
         else
         {
